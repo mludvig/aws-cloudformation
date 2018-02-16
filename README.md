@@ -4,7 +4,7 @@ This is an Ansible role for generating CloudFormation templates and deploying Cl
 
 ## Requirements
 
-- Python 2.7
+- Python 2.7 or 3.4+
 - PIP package manager (**easy_install pip**)
 - Ansible 2.2 or greater (**pip install ansible**)
 - Boto (**pip install boto**)
