@@ -5,6 +5,7 @@ import yaml
 import os
 import re
 import logging
+from functools import reduce
 
 FORMAT = "[stack_transform]: %(message)s"
 PROPERTY_TRANSFORM = 'Property::Transform'
@@ -33,7 +34,7 @@ def stack_output(data):
       'Resources',
       'Outputs'
     ]
-    if k in data.keys()
+    if k in list(data.keys())
   }
 
 def lookup_template(file, template_paths=os.getcwd()):
@@ -52,7 +53,7 @@ def render_template(template_file, template_paths, data, filters={}, **kwargs):
   environment = Environment()
   environment.loader = FileSystemLoader(template_paths)
   if filters:
-    environment.filters = dict(environment.filters.items() + filters.items())
+    environment.filters = dict(list(environment.filters.items()) + list(filters.items()))
   # Render template, passing data in as Config dictionary
   try:
     template = environment.get_template(template_file)
@@ -67,7 +68,7 @@ def ansible_filters(filter_paths):
   # Load Ansible filters  
   for path in filter_paths:
     filter_loader.add_directory(path)
-  return { k:v for filter in filter_loader.all() for k,v in filter.filters().items() }
+  return { k:v for filter in filter_loader.all() for k,v in list(filter.filters().items()) }
 
 # Joins a list of items with a delimiter object
 # e.g. [{'Ref':'AWS::StackName'},'-Thing'] => [{'Ref':'AWS::StackName'},{'Fn::ImportValue':'xyz'},'-Thing']
@@ -84,7 +85,7 @@ def ref_replace(s, regex='\${([^{}]*)}'):
 def search_and_replace(data, search, replace, as_value=False):
   # Fn::Sub is evil!
   def parse_fn_sub_instrinsic_functions(item, node, parent, parent_key):
-    ascii_node = {str(k): str(v) for k, v in node.items()}
+    ascii_node = {str(k): str(v) for k, v in list(node.items())}
     parts = ascii_node['Fn::Sub'].split('${%s}' % search)
     joined_parts = list_join(parts, replace)
     ref_replaced = reduce(
@@ -101,9 +102,9 @@ def search_and_replace(data, search, replace, as_value=False):
         node[key] = replace
     elif key in ['Fn::FindInMap','Fn::GetAtt','Fn::If'] and item[0] == search:
       node[key][0] = replace
-    elif key == 'Condition' and search == item and parent_key != 'Properties' and isinstance(replace, (basestring,int)):
+    elif key == 'Condition' and search == item and parent_key != 'Properties' and isinstance(replace, (str,int)):
       node[key] = replace
-    elif key == 'DependsOn' and search in item and parent_key != 'Properties' and isinstance(replace, (basestring,int)):
+    elif key == 'DependsOn' and search in item and parent_key != 'Properties' and isinstance(replace, (str,int)):
       node[key][item.index(search)] = replace
     elif key == 'DependsOn' and search in item and parent_key != 'Properties' and isinstance(replace, list):
       del node[key][item.index(search)]
@@ -111,16 +112,16 @@ def search_and_replace(data, search, replace, as_value=False):
     elif key == 'Fn::Sub' and '${%s' % search in item:
       replace_value = str(replace)
       if as_value:
-        if type(replace) is dict and 'Ref' in replace.keys():
+        if type(replace) is dict and 'Ref' in list(replace.keys()):
           replace_value = '${%s}' % replace['Ref']
           node[key] = item.replace('${%s}' % search, replace_value)
-        elif type(replace) is dict and 'Fn::Sub' in replace.keys():
+        elif type(replace) is dict and 'Fn::Sub' in list(replace.keys()):
           replace_value = replace['Fn::Sub']
           node[key] = item.replace('${%s}' % search, replace_value)
-        elif type(replace) is dict and 'Fn::GetAtt' in replace.keys():
+        elif type(replace) is dict and 'Fn::GetAtt' in list(replace.keys()):
           replace_value = '${%s}' % ('.').join(replace['Fn::GetAtt'])
           node[key] = item.replace('${%s}' % search, replace_value)
-        elif type(replace) is dict and 'Fn::GetAtt' in replace.keys():
+        elif type(replace) is dict and 'Fn::GetAtt' in list(replace.keys()):
           replace_value = '${%s}' % ('.').join(replace['Fn::GetAtt'])
           node[key] = item.replace('${%s}' % search, replace_value)
         elif type(replace) is dict and list(set(['Fn::ImportValue','Fn::If','Fn::Join','Fn::Select']) & set(replace.keys())):
@@ -134,7 +135,7 @@ def search_and_replace(data, search, replace, as_value=False):
       for index, item in enumerate(node):
         walk(item, node, index)
     elif type(node) is dict:
-      for key, item in node.items():
+      for key, item in list(node.items()):
         parse(key, item, node, parent, parent_key)
         walk(item, node, key)
   walk(data)
@@ -146,14 +147,14 @@ def find_in_sub(search, values):
     return []
 
 def fix_conditions(data, transform, input_parameter_key, input_parameter_value, resource_property):
-  resource_keys = data['Resources'].keys()
+  resource_keys = list(data['Resources'].keys())
   if (isinstance(resource_property, dict) and
       (resource_property.get('Ref') in resource_keys or
        resource_property.get('Fn::GetAtt') or 
        resource_property.get('Fn::ImportValue') or
        find_in_sub(resource_property.get('Fn::Sub'),resource_keys))):
     # Find and replace any conditions that reference an illegal input parameter
-    for c,v in transform.get('Conditions',{}).iteritems():
+    for c,v in transform.get('Conditions',{}).items():
       logging.debug("--> Forcing evaluation of condition %s as it references an illegal input value", c)
       search_and_replace(transform['Conditions'],{'Ref':input_parameter_key}, input_parameter_key)
 
@@ -177,7 +178,7 @@ def stack_transform(data, filter_paths=[],template_paths=[], debug=False):
       'resource': resource_value,
       'output': render_template(os.path.basename(file), os.path.dirname(file), resource_value, filters) 
     }
-    for resource_key, resource_value in data['Resources'].iteritems() 
+    for resource_key, resource_value in data['Resources'].items()
     if resource_value.get('Type') == STACK_TRANSFORM
     for file in [lookup_template(resource_value['Template'], template_paths)]
   ]
@@ -189,7 +190,7 @@ def stack_transform(data, filter_paths=[],template_paths=[], debug=False):
     name = transform['name']
     transform_parameters = transform['output'].get('Parameters', {})
     logging.debug("%s: Renaming input references in main stack", name)
-    for key in transform['output'].get('Outputs', {}).keys():
+    for key in list(transform['output'].get('Outputs', {}).keys()):
       logging.debug("--> Renaming %s.%s to %s", name, key, name+key)
       search_and_replace(data,'%s.%s' % (name, key), name+key)
       logging.debug("--> Replacing {'Fn::GetAtt': ['%s','%s']} with %s", name, key, {'Ref': name+key})
@@ -208,9 +209,9 @@ def stack_transform(data, filter_paths=[],template_paths=[], debug=False):
     # Rename keys in Resources, Mappings, Conditions and Outputs
     logging.debug("%s: Renaming transform references", name)
     for section in ['Resources','Mappings','Conditions','Outputs']:
-      for key in output.get(section, {}).keys():
+      for key in list(output.get(section, {}).keys()):
         # Check if renamed resources will clash with main stack
-        if section != 'Outputs' and name+key in data.get(section, {}).keys():
+        if section != 'Outputs' and name+key in list(data.get(section, {}).keys()):
           raise AnsibleError("ERROR: The key %s in transform %s clashes with object %s in main stack '%s'" % (key, name, name+key, section))
         output[section][name+key] = output[section].pop(key)
         logging.debug("--> Renaming %s to %s", key, name+key)
@@ -218,14 +219,14 @@ def stack_transform(data, filter_paths=[],template_paths=[], debug=False):
 
     # Fix conditions that will result in illegally referencing a resource
     logging.debug("%s: Evaluating conditions that reference a resource or stack export", name)
-    for output_param_key, output_param_value in output_parameters.iteritems():
+    for output_param_key, output_param_value in output_parameters.items():
       resource_property = resource_properties.get(output_param_key)
       if resource_property:
         fix_conditions(data, output, output_param_key, output_param_value, resource_property)
 
     # Process input parameters
     logging.debug("%s: Replacing transform input parameter values", name)
-    for output_param_key, output_param_value in output_parameters.iteritems():
+    for output_param_key, output_param_value in output_parameters.items():
       # Get corresponding transform input property from main stack
       resource_property = resource_properties.get(output_param_key)
       if resource_property:
@@ -255,7 +256,7 @@ def stack_transform(data, filter_paths=[],template_paths=[], debug=False):
         else:
           output['Resources'][name+mapping]['DependsOn'] = dependencies
     logging.debug("%s: Replacing transformed output values in main stack", name)
-    for key,value in output.get('Outputs', {}).iteritems():
+    for key,value in output.get('Outputs', {}).items():
       replaced_value = value['Value']
       logging.debug("--> Replacing %s value with %s", key, replaced_value)
       search_and_replace(data, key, replaced_value, as_value=True)
@@ -280,9 +281,9 @@ def property_transform(data, filter_paths=[]):
   # Get transform properties - {Stack}.Resources.<Resource>.Properties.<Property>.Property::Transform
   transforms = [ 
     {'resource':resource_key, 'property': property_key}
-    for resource_key, resource_value in data['Resources'].iteritems() 
+    for resource_key, resource_value in data['Resources'].items()
       if resource_value.get('Properties')
-    for property_key, property_value in resource_value.get('Properties').iteritems() 
+    for property_key, property_value in resource_value.get('Properties').items()
       if type(property_value) is dict and property_value.get(PROPERTY_TRANSFORM)
   ]
   for transform in transforms:
