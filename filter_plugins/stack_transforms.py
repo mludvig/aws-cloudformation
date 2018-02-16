@@ -1,11 +1,17 @@
 from jinja2 import Template,FileSystemLoader,Environment,TemplateNotFound
-from ansible.plugins import filter_loader
 from ansible.errors import AnsibleError
 import yaml
 import os
 import re
 import logging
 from functools import reduce
+
+try:
+    # Ansible >= 2.4
+    from ansible.plugins.loader import filter_loader
+except ImportError:
+    # Ansible < 2.4
+    from ansible.plugins import filter_loader
 
 FORMAT = "[stack_transform]: %(message)s"
 PROPERTY_TRANSFORM = 'Property::Transform'
